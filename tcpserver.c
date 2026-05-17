@@ -1,60 +1,55 @@
+#include <netinet/in.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
 #include <unistd.h>
-#include <arpa/inet.h>
 
-int main()
-{
-    int s, ns, n;
-    struct sockaddr_in server, client;
-    char b1[100], b2[100];
-    socklen_t len;
+#define PORT 8080
 
-    // Create TCP socket
-    s = socket(AF_INET, SOCK_STREAM, 0);
+int main() {
+    int server_fd, new_socket;
+    struct sockaddr_in address;
+    socklen_t addrlen = sizeof(address);
+    char buffer[1024];
+    char message[1024];
 
-    // Server configuration
-    server.sin_family = AF_INET;
-    server.sin_port = htons(2000);
-    server.sin_addr.s_addr = inet_addr("127.0.0.1");
-
-    // Bind socket
-    bind(s, (struct sockaddr *)&server, sizeof(server));
-
-    // Listen for clients
-    listen(s, 5);
-
-    printf("Server waiting for client...\n");
-
-    len = sizeof(client);
-
-    // Accept client connection
-    ns = accept(s, (struct sockaddr *)&client, &len);
-
-    while(1)
-    {
-        // Receive message from client
-        n = recv(ns, b1, sizeof(b1), 0);
-        b1[n] = '\0';
-
-        if(!(strcmp(b1, "exit")))
-        {
-            printf("Client exited\n");
-            break;
-        }
-
-        printf("Client: %s\n", b1);
-
-        // Server reply
-        printf("Server: ");
-        fgets(b2, sizeof(b2), stdin);
-
-        // Send reply to client
-        send(ns, b2, strlen(b2), 0);
+    server_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (server_fd < 0) {
+        perror("socket");
+        exit(1);
     }
 
-    close(ns);
-    close(s);
+    int opt = 1;
+    setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt));
 
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_port = htons(PORT);
+
+    bind(server_fd, (struct sockaddr*)&address, sizeof(address));
+    listen(server_fd, 3);
+
+    printf("Server waiting for connection...\n");
+    new_socket = accept(server_fd, (struct sockaddr*)&address, &addrlen);
+    printf("Client connected!\n");
+
+    while (1) {
+        memset(buffer, 0, sizeof(buffer));
+        read(new_socket, buffer, sizeof(buffer));
+        printf("Client: %s", buffer);
+
+        if (strncmp(buffer, "exit", 4) == 0) break;
+
+        printf("Server: ");
+        fgets(message, sizeof(message), stdin);
+        send(new_socket, message, strlen(message), 0);
+
+        if (strncmp(message, "exit", 4) == 0) break;
+    }
+
+    close(new_socket);
+    close(server_fd);
     return 0;
 }
+
